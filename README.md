@@ -10,8 +10,10 @@ The plugin is intentionally thin. It does not duplicate the AiRep24 assistant lo
 - One-click store connection that creates the AiRep24 tenant, bot and WooCommerce storefront channel.
 - Storefront widget auto-injection.
 - WooCommerce product, page, store metadata and theme color/gradient sync.
+- WooCommerce categories, coupons, shipping, payment and tax settings sync.
 - Product create/update/delete events.
 - Theme CSS color and gradient signals.
+- Live chats, manual operator replies, visitor memory and conversation gap views inside WordPress admin.
 - Trial and checkout links routed to AiRep24.
 
 ## Backend Contract
@@ -21,6 +23,12 @@ The plugin is intentionally thin. It does not duplicate the AiRep24 assistant lo
 - `POST /v1/woocommerce/config`
 - `POST /v1/woocommerce/sync`
 - `POST /v1/woocommerce/events`
+- `GET /v1/woocommerce/billing`
+- `GET /v1/woocommerce/conversations`
+- `GET/POST /v1/woocommerce/conversations/:externalId/messages`
+- `POST /v1/woocommerce/conversations/:externalId/status`
+- `GET/DELETE /v1/woocommerce/memory`
+- `GET /v1/woocommerce/knowledge-gaps`
 - Hosted onboarding at `/auth/register?platform=woocommerce`
 - Hosted checkout at `/billing/checkout?platform=woocommerce`
 

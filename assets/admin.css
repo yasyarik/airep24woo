@@ -150,9 +150,127 @@
   width: 84px;
 }
 
+.airep24woo-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 18px;
+  max-width: 1120px;
+}
+
+.airep24woo-grid .airep24woo-card {
+  margin-top: 18px;
+}
+
+.airep24woo-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.airep24woo-list-item {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid rgba(16, 35, 30, 0.12);
+  border-radius: 12px;
+  background: rgba(23, 107, 91, 0.04);
+  color: #10231e;
+  text-decoration: none;
+}
+
+.airep24woo-list-item:hover,
+.airep24woo-list-item.is-selected {
+  border-color: rgba(23, 107, 91, 0.45);
+  background: rgba(23, 107, 91, 0.09);
+}
+
+.airep24woo-list-item span {
+  color: #5c6965;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.airep24woo-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 340px;
+  max-height: 560px;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid rgba(16, 35, 30, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.airep24woo-bubble {
+  max-width: 78%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(16, 35, 30, 0.12);
+  overflow-wrap: anywhere;
+}
+
+.airep24woo-bubble.is-user {
+  align-self: flex-start;
+}
+
+.airep24woo-bubble.is-assistant {
+  align-self: flex-end;
+  background: #176b5b;
+  color: #ffffff;
+}
+
+.airep24woo-bubble.is-human {
+  align-self: flex-end;
+  background: #10231e;
+  color: #ffffff;
+}
+
+.airep24woo-bubble p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.airep24woo-reply {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.airep24woo-reply textarea {
+  width: 100%;
+  border-radius: 10px;
+}
+
+.airep24woo-table {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.airep24woo-table article {
+  padding: 14px;
+  border: 1px solid rgba(16, 35, 30, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.airep24woo-table code {
+  display: block;
+  max-width: 100%;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 10px;
+  overflow: auto;
+  background: rgba(16, 35, 30, 0.08);
+}
+
 @media (max-width: 782px) {
   .airep24woo-hero,
-  .airep24woo-plan-grid {
+  .airep24woo-plan-grid,
+  .airep24woo-grid {
     display: block;
   }
 

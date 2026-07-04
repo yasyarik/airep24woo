@@ -70,6 +70,50 @@ final class AiRep24Woo_API_Client
         ], 15);
     }
 
+    public function get_billing()
+    {
+        return $this->request('GET', '/woocommerce/billing');
+    }
+
+    public function list_conversations($status = 'ACTIVE')
+    {
+        return $this->request('GET', '/woocommerce/conversations?status=' . rawurlencode($status));
+    }
+
+    public function get_conversation_messages($external_id)
+    {
+        return $this->request('GET', '/woocommerce/conversations/' . rawurlencode($external_id) . '/messages');
+    }
+
+    public function send_human_reply($external_id, $text)
+    {
+        return $this->request('POST', '/woocommerce/conversations/' . rawurlencode($external_id) . '/messages', [
+            'text' => $text,
+        ]);
+    }
+
+    public function set_conversation_status($external_id, $status)
+    {
+        return $this->request('POST', '/woocommerce/conversations/' . rawurlencode($external_id) . '/status', [
+            'status' => $status,
+        ]);
+    }
+
+    public function list_memory()
+    {
+        return $this->request('GET', '/woocommerce/memory');
+    }
+
+    public function forget_visitor($visitor_id)
+    {
+        return $this->request('DELETE', '/woocommerce/memory/' . rawurlencode($visitor_id));
+    }
+
+    public function list_knowledge_gaps()
+    {
+        return $this->request('GET', '/woocommerce/knowledge-gaps');
+    }
+
     private function request($method, $path, array $body = null, $timeout = 20)
     {
         $url = rtrim($this->settings['api_base_url'], '/') . $path;

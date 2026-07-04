@@ -13,6 +13,9 @@ final class AiRep24Woo_Admin_Page
         add_action('admin_post_airep24woo_connect', [__CLASS__, 'handle_connect']);
         add_action('admin_post_airep24woo_save', [__CLASS__, 'handle_save']);
         add_action('admin_post_airep24woo_sync', [__CLASS__, 'handle_sync']);
+        add_action('admin_post_airep24woo_reply', [__CLASS__, 'handle_reply']);
+        add_action('admin_post_airep24woo_resolve', [__CLASS__, 'handle_resolve']);
+        add_action('admin_post_airep24woo_forget', [__CLASS__, 'handle_forget']);
     }
 
     public static function register_menu()
@@ -160,6 +163,52 @@ final class AiRep24Woo_Admin_Page
         exit;
     }
 
+    public static function handle_reply()
+    {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('Permission denied.', 'airep24woo'));
+        }
+        check_admin_referer('airep24woo_reply');
+        $external_id = sanitize_text_field($_POST['external_id'] ?? '');
+        $text = sanitize_textarea_field($_POST['reply_text'] ?? '');
+        if ($external_id && $text) {
+            $client = new AiRep24Woo_API_Client();
+            $client->send_human_reply($external_id, $text);
+        }
+        wp_safe_redirect(admin_url('admin.php?page=airep24woo&tab=chats&conversation=' . rawurlencode($external_id)));
+        exit;
+    }
+
+    public static function handle_resolve()
+    {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('Permission denied.', 'airep24woo'));
+        }
+        check_admin_referer('airep24woo_resolve');
+        $external_id = sanitize_text_field($_POST['external_id'] ?? '');
+        if ($external_id) {
+            $client = new AiRep24Woo_API_Client();
+            $client->set_conversation_status($external_id, 'RESOLVED');
+        }
+        wp_safe_redirect(admin_url('admin.php?page=airep24woo&tab=chats'));
+        exit;
+    }
+
+    public static function handle_forget()
+    {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('Permission denied.', 'airep24woo'));
+        }
+        check_admin_referer('airep24woo_forget');
+        $visitor_id = sanitize_text_field($_POST['visitor_id'] ?? '');
+        if ($visitor_id) {
+            $client = new AiRep24Woo_API_Client();
+            $client->forget_visitor($visitor_id);
+        }
+        wp_safe_redirect(admin_url('admin.php?page=airep24woo&tab=memory'));
+        exit;
+    }
+
     public static function render()
     {
         if (!current_user_can('manage_woocommerce')) {
@@ -173,6 +222,9 @@ final class AiRep24Woo_Admin_Page
             'assistant' => __('Assistant', 'airep24woo'),
             'widget' => __('Widget', 'airep24woo'),
             'knowledge' => __('Knowledge', 'airep24woo'),
+            'chats' => __('Live Chats', 'airep24woo'),
+            'memory' => __('Memory', 'airep24woo'),
+            'gaps' => __('Gaps', 'airep24woo'),
             'billing' => __('Billing', 'airep24woo'),
             'connection' => __('Connection', 'airep24woo'),
         ];
@@ -214,6 +266,12 @@ final class AiRep24Woo_Admin_Page
 
             <?php if ($tab === 'knowledge') : ?>
                 <?php self::render_knowledge($settings); ?>
+            <?php elseif ($tab === 'chats') : ?>
+                <?php self::render_chats($client); ?>
+            <?php elseif ($tab === 'memory') : ?>
+                <?php self::render_memory($client); ?>
+            <?php elseif ($tab === 'gaps') : ?>
+                <?php self::render_gaps($client); ?>
             <?php elseif ($tab === 'billing') : ?>
                 <?php self::render_billing($settings, $client); ?>
             <?php else : ?>
@@ -296,6 +354,9 @@ final class AiRep24Woo_Admin_Page
 
     private static function render_billing(array $settings, AiRep24Woo_API_Client $client)
     {
+        $remote = AiRep24Woo_Settings::is_connected() ? $client->get_billing() : null;
+        $billing = is_array($remote) && !empty($remote['billing']) ? $remote['billing'] : [];
+        $limits = is_array($remote) && !empty($remote['limits']) ? $remote['limits'] : [];
         ?>
         <section class="airep24woo-card">
             <h2><?php esc_html_e('Plan & billing', 'airep24woo'); ?></h2>
@@ -313,10 +374,126 @@ final class AiRep24Woo_Admin_Page
             </div>
             <dl class="airep24woo-meta">
                 <dt><?php esc_html_e('Current plan', 'airep24woo'); ?></dt>
-                <dd><?php echo esc_html($settings['plan'] ?: __('Not connected', 'airep24woo')); ?></dd>
+                <dd><?php echo esc_html(($billing['plan'] ?? $settings['plan']) ?: __('Not connected', 'airep24woo')); ?></dd>
                 <dt><?php esc_html_e('Status', 'airep24woo'); ?></dt>
-                <dd><?php echo esc_html($settings['plan_status'] ?: __('Unknown', 'airep24woo')); ?></dd>
+                <dd><?php echo esc_html(($billing['status'] ?? $settings['plan_status']) ?: __('Unknown', 'airep24woo')); ?></dd>
+                <dt><?php esc_html_e('AI answers/month', 'airep24woo'); ?></dt>
+                <dd><?php echo esc_html($billing['monthlyCredits'] ?? $limits['monthlyCredits'] ?? '-'); ?></dd>
+                <dt><?php esc_html_e('Knowledge pages/site', 'airep24woo'); ?></dt>
+                <dd><?php echo esc_html($limits['pageScanLimit'] ?? '-'); ?></dd>
             </dl>
+        </section>
+        <?php
+    }
+
+    private static function render_chats(AiRep24Woo_API_Client $client)
+    {
+        $active = AiRep24Woo_Settings::is_connected() ? $client->list_conversations('ACTIVE') : [];
+        $conversations = is_array($active) ? ($active['conversations'] ?? []) : [];
+        $selected_id = sanitize_text_field($_GET['conversation'] ?? ($conversations[0]['externalId'] ?? ''));
+        $messages_payload = $selected_id ? $client->get_conversation_messages($selected_id) : [];
+        $messages = is_array($messages_payload) ? ($messages_payload['messages'] ?? []) : [];
+        ?>
+        <section class="airep24woo-grid">
+            <div class="airep24woo-card">
+                <h2><?php esc_html_e('Live chats', 'airep24woo'); ?></h2>
+                <p><?php esc_html_e('Recent active storefront conversations. Open a thread to reply manually or resolve it.', 'airep24woo'); ?></p>
+                <div class="airep24woo-list">
+                    <?php if (empty($conversations)) : ?>
+                        <p><?php esc_html_e('No active conversations yet.', 'airep24woo'); ?></p>
+                    <?php endif; ?>
+                    <?php foreach ($conversations as $conversation) : ?>
+                        <?php $external = $conversation['externalId'] ?? ''; ?>
+                        <a class="airep24woo-list-item <?php echo $selected_id === $external ? 'is-selected' : ''; ?>" href="<?php echo esc_url(admin_url('admin.php?page=airep24woo&tab=chats&conversation=' . rawurlencode($external))); ?>">
+                            <strong><?php echo esc_html($conversation['visitorId'] ?? $external); ?></strong>
+                            <span><?php echo esc_html($conversation['lastMessage']['content'] ?? __('No messages yet.', 'airep24woo')); ?></span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div class="airep24woo-card">
+                <h2><?php esc_html_e('Conversation', 'airep24woo'); ?></h2>
+                <div class="airep24woo-thread">
+                    <?php if (!$selected_id) : ?>
+                        <p><?php esc_html_e('Select a conversation.', 'airep24woo'); ?></p>
+                    <?php endif; ?>
+                    <?php foreach ($messages as $message) : ?>
+                        <div class="airep24woo-bubble is-<?php echo esc_attr($message['role'] ?? 'user'); ?>">
+                            <strong><?php echo esc_html($message['role'] ?? 'message'); ?></strong>
+                            <p><?php echo esc_html($message['content'] ?? ''); ?></p>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php if ($selected_id) : ?>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="airep24woo-reply">
+                        <?php wp_nonce_field('airep24woo_reply'); ?>
+                        <input type="hidden" name="action" value="airep24woo_reply" />
+                        <input type="hidden" name="external_id" value="<?php echo esc_attr($selected_id); ?>" />
+                        <textarea name="reply_text" rows="3" placeholder="<?php esc_attr_e('Type a manual reply...', 'airep24woo'); ?>"></textarea>
+                        <button class="button button-primary airep24woo-primary" type="submit"><?php esc_html_e('Send reply', 'airep24woo'); ?></button>
+                    </form>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                        <?php wp_nonce_field('airep24woo_resolve'); ?>
+                        <input type="hidden" name="action" value="airep24woo_resolve" />
+                        <input type="hidden" name="external_id" value="<?php echo esc_attr($selected_id); ?>" />
+                        <button class="button" type="submit"><?php esc_html_e('Mark resolved', 'airep24woo'); ?></button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </section>
+        <?php
+    }
+
+    private static function render_memory(AiRep24Woo_API_Client $client)
+    {
+        $payload = AiRep24Woo_Settings::is_connected() ? $client->list_memory() : [];
+        $profiles = is_array($payload) ? ($payload['profiles'] ?? []) : [];
+        ?>
+        <section class="airep24woo-card">
+            <h2><?php esc_html_e('Visitor memory', 'airep24woo'); ?></h2>
+            <p><?php esc_html_e('Consent-based visitor preferences and recent interests saved for this assistant.', 'airep24woo'); ?></p>
+            <div class="airep24woo-table">
+                <?php foreach ($profiles as $profile) : ?>
+                    <article>
+                        <strong><?php echo esc_html($profile['visitorId'] ?? 'Visitor'); ?></strong>
+                        <p><?php echo esc_html($profile['memorySummary'] ?? ''); ?></p>
+                        <code><?php echo esc_html(wp_json_encode($profile['preferences'] ?? [])); ?></code>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                            <?php wp_nonce_field('airep24woo_forget'); ?>
+                            <input type="hidden" name="action" value="airep24woo_forget" />
+                            <input type="hidden" name="visitor_id" value="<?php echo esc_attr($profile['visitorId'] ?? ''); ?>" />
+                            <button class="button" type="submit"><?php esc_html_e('Forget visitor', 'airep24woo'); ?></button>
+                        </form>
+                    </article>
+                <?php endforeach; ?>
+                <?php if (empty($profiles)) : ?>
+                    <p><?php esc_html_e('No visitor memory yet.', 'airep24woo'); ?></p>
+                <?php endif; ?>
+            </div>
+        </section>
+        <?php
+    }
+
+    private static function render_gaps(AiRep24Woo_API_Client $client)
+    {
+        $payload = AiRep24Woo_Settings::is_connected() ? $client->list_knowledge_gaps() : [];
+        $gaps = is_array($payload) ? ($payload['gaps'] ?? []) : [];
+        ?>
+        <section class="airep24woo-card">
+            <h2><?php esc_html_e('Conversation gaps', 'airep24woo'); ?></h2>
+            <p><?php esc_html_e('Questions from real chats that exposed missing or weak store knowledge.', 'airep24woo'); ?></p>
+            <div class="airep24woo-table">
+                <?php foreach ($gaps as $gap) : ?>
+                    <article>
+                        <strong><?php echo esc_html($gap['title'] ?? __('Knowledge gap', 'airep24woo')); ?></strong>
+                        <p><?php echo esc_html($gap['detail'] ?? ''); ?></p>
+                        <span><?php echo esc_html(($gap['category'] ?? '') . ' · ' . ($gap['occurrences'] ?? 1) . 'x'); ?></span>
+                    </article>
+                <?php endforeach; ?>
+                <?php if (empty($gaps)) : ?>
+                    <p><?php esc_html_e('No open gaps yet.', 'airep24woo'); ?></p>
+                <?php endif; ?>
+            </div>
         </section>
         <?php
     }
