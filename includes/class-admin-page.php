@@ -10,6 +10,7 @@ final class AiRep24Woo_Admin_Page
     {
         add_action('admin_menu', [__CLASS__, 'register_menu']);
         add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
+        add_action('admin_post_airep24woo_connect', [__CLASS__, 'handle_connect']);
         add_action('admin_post_airep24woo_save', [__CLASS__, 'handle_save']);
         add_action('admin_post_airep24woo_sync', [__CLASS__, 'handle_sync']);
     }
@@ -34,6 +35,57 @@ final class AiRep24Woo_Admin_Page
         }
         wp_enqueue_style('airep24woo-admin', AIREP24WOO_URL . 'assets/admin.css', [], AIREP24WOO_VERSION);
         wp_enqueue_script('airep24woo-admin', AIREP24WOO_URL . 'assets/admin.js', [], AIREP24WOO_VERSION, true);
+    }
+
+    public static function handle_connect()
+    {
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('Permission denied.', 'airep24woo'));
+        }
+        check_admin_referer('airep24woo_connect');
+
+        $settings = AiRep24Woo_Settings::get();
+        $client = new AiRep24Woo_API_Client();
+        $result = $client->connect_store(AiRep24Woo_Sync::build_store_payload());
+
+        if (is_wp_error($result)) {
+            $settings['last_sync_status'] = $result->get_error_message();
+            AiRep24Woo_Settings::update($settings);
+            wp_safe_redirect(admin_url('admin.php?page=airep24woo&tab=connection&connected=0'));
+            exit;
+        }
+
+        $settings['connection_token'] = sanitize_text_field($result['connectionToken'] ?? $settings['connection_token']);
+        $settings['tenant_id'] = sanitize_text_field($result['tenantId'] ?? $settings['tenant_id']);
+        $settings['site_id'] = sanitize_text_field($result['siteId'] ?? $settings['site_id']);
+        $settings['bot_key'] = sanitize_text_field($result['botKey'] ?? $settings['bot_key']);
+        $settings['bot_name'] = sanitize_text_field($result['botName'] ?? $settings['bot_name']);
+        if (!empty($result['billing']) && is_array($result['billing'])) {
+            $settings['plan'] = sanitize_text_field($result['billing']['plan'] ?? $settings['plan']);
+            $settings['plan_status'] = sanitize_text_field($result['billing']['status'] ?? $settings['plan_status']);
+        }
+        if (!empty($result['widget']) && is_array($result['widget'])) {
+            $settings['widget_enabled'] = empty($result['widget']['enabled']) ? '0' : '1';
+            $settings['voice_enabled'] = empty($result['widget']['voiceModeEnabled']) ? '0' : '1';
+            $settings['primary_color'] = AiRep24Woo_Settings::sanitize_css_color_value($result['widget']['primaryGradient'] ?? $result['widget']['primaryColor'] ?? '', $settings['primary_color']);
+            $settings['background_color'] = AiRep24Woo_Settings::sanitize_css_color_value($result['widget']['backgroundColor'] ?? '', $settings['background_color']);
+            $settings['position'] = sanitize_key($result['widget']['position'] ?? $settings['position']);
+            $settings['avatar_id'] = sanitize_key($result['widget']['characterId'] ?? $settings['avatar_id']);
+        }
+        if (!empty($result['persona']) && is_array($result['persona'])) {
+            $settings['welcome_message'] = sanitize_textarea_field($result['persona']['welcomeMessage'] ?? $settings['welcome_message']);
+            $settings['tone'] = sanitize_key($result['persona']['tone'] ?? $settings['tone']);
+        }
+        if (!empty($result['sitePalette']) && is_array($result['sitePalette'])) {
+            $settings['site_palette'] = $result['sitePalette'];
+        }
+        $settings['last_sync_at'] = current_time('mysql');
+        $stored = isset($result['sync']['stored']) ? (int) $result['sync']['stored'] : 0;
+        $settings['last_sync_status'] = sprintf(__('Connected and synced %d knowledge items.', 'airep24woo'), $stored);
+
+        AiRep24Woo_Settings::update($settings);
+        wp_safe_redirect(admin_url('admin.php?page=airep24woo&connected=1'));
+        exit;
     }
 
     public static function handle_save()
@@ -93,7 +145,12 @@ final class AiRep24Woo_Admin_Page
         $result = $client->sync_store(AiRep24Woo_Sync::build_store_payload());
 
         $settings['last_sync_at'] = current_time('mysql');
-        $settings['last_sync_status'] = is_wp_error($result) ? $result->get_error_message() : __('Sync request sent.', 'airep24woo');
+        if (is_wp_error($result)) {
+            $settings['last_sync_status'] = $result->get_error_message();
+        } else {
+            $stored = isset($result['sync']['stored']) ? (int) $result['sync']['stored'] : 0;
+            $settings['last_sync_status'] = sprintf(__('Synced %d knowledge items.', 'airep24woo'), $stored);
+        }
         if (!is_wp_error($result) && isset($result['sitePalette'])) {
             $settings['site_palette'] = $result['sitePalette'];
         }
@@ -127,9 +184,18 @@ final class AiRep24Woo_Admin_Page
                     <h1><?php esc_html_e('AI assistant control center', 'airep24woo'); ?></h1>
                     <p><?php esc_html_e('Configure the same assistant, widget, voice, knowledge sync, trial and billing flow from your WordPress admin.', 'airep24woo'); ?></p>
                 </div>
-                <a class="button button-primary airep24woo-primary" href="<?php echo esc_url($client->onboarding_url()); ?>" target="_blank" rel="noreferrer">
-                    <?php echo AiRep24Woo_Settings::is_connected() ? esc_html__('Open AiRep24', 'airep24woo') : esc_html__('Start free trial', 'airep24woo'); ?>
-                </a>
+                <div class="airep24woo-hero-actions">
+                    <?php if (AiRep24Woo_Settings::is_connected()) : ?>
+                        <a class="button button-primary airep24woo-primary" href="<?php echo esc_url($client->onboarding_url()); ?>" target="_blank" rel="noreferrer"><?php esc_html_e('Open AiRep24', 'airep24woo'); ?></a>
+                    <?php else : ?>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                            <?php wp_nonce_field('airep24woo_connect'); ?>
+                            <input type="hidden" name="action" value="airep24woo_connect" />
+                            <button class="button button-primary airep24woo-primary" type="submit"><?php esc_html_e('Connect store', 'airep24woo'); ?></button>
+                        </form>
+                        <a class="button" href="<?php echo esc_url($client->onboarding_url()); ?>" target="_blank" rel="noreferrer"><?php esc_html_e('Create AiRep24 account', 'airep24woo'); ?></a>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <nav class="nav-tab-wrapper">
@@ -142,7 +208,7 @@ final class AiRep24Woo_Admin_Page
 
             <?php if (!AiRep24Woo_Settings::is_connected()) : ?>
                 <div class="notice notice-warning inline">
-                    <p><?php esc_html_e('Connect AiRep24 to activate remote settings, billing, sync and the storefront widget.', 'airep24woo'); ?></p>
+                    <p><?php esc_html_e('Connect the store first. AiRep24 will create the assistant, scan products/pages/colors, and enable the storefront widget after a usable knowledge base is created.', 'airep24woo'); ?></p>
                 </div>
             <?php endif; ?>
 
@@ -266,10 +332,14 @@ final class AiRep24Woo_Admin_Page
             <h3><?php esc_html_e('Recommended store colors', 'airep24woo'); ?></h3>
             <div class="airep24woo-swatches">
                 <?php foreach ($palette['colors'] as $color) : ?>
-                    <button type="button" class="airep24woo-swatch" title="<?php echo esc_attr($color); ?>" data-airep24-color="<?php echo esc_attr($color); ?>" style="background: <?php echo esc_attr($color); ?>"></button>
+                    <?php $value = is_array($color) ? ($color['value'] ?? '') : $color; ?>
+                    <?php if (!$value) continue; ?>
+                    <button type="button" class="airep24woo-swatch" title="<?php echo esc_attr($value); ?>" data-airep24-color="<?php echo esc_attr($value); ?>" style="background: <?php echo esc_attr($value); ?>"></button>
                 <?php endforeach; ?>
                 <?php foreach ($palette['gradients'] as $gradient) : ?>
-                    <button type="button" class="airep24woo-swatch airep24woo-gradient" title="<?php echo esc_attr($gradient); ?>" data-airep24-color="<?php echo esc_attr($gradient); ?>" style="background: <?php echo esc_attr($gradient); ?>"></button>
+                    <?php $value = is_array($gradient) ? ($gradient['value'] ?? '') : $gradient; ?>
+                    <?php if (!$value) continue; ?>
+                    <button type="button" class="airep24woo-swatch airep24woo-gradient" title="<?php echo esc_attr($value); ?>" data-airep24-color="<?php echo esc_attr($value); ?>" style="background: <?php echo esc_attr($value); ?>"></button>
                 <?php endforeach; ?>
             </div>
         </div>

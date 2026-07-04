@@ -23,7 +23,7 @@ final class AiRep24Woo_API_Client
             'storeName' => get_bloginfo('name'),
         ];
 
-        return trailingslashit($this->settings['api_base_url']) . 'auth/register?' . http_build_query($params, '', '&');
+        return trailingslashit($this->settings['widget_base_url']) . 'auth/register?' . http_build_query($params, '', '&');
     }
 
     public function checkout_url($plan = '')
@@ -35,7 +35,12 @@ final class AiRep24Woo_API_Client
             'returnUrl' => admin_url('admin.php?page=airep24woo&tab=billing'),
         ];
 
-        return trailingslashit($this->settings['api_base_url']) . 'billing/checkout?' . http_build_query($params, '', '&');
+        return trailingslashit($this->settings['widget_base_url']) . 'billing/checkout?' . http_build_query($params, '', '&');
+    }
+
+    public function connect_store(array $payload)
+    {
+        return $this->request('POST', '/woocommerce/connect', $payload, 60);
     }
 
     public function get_remote_config()
@@ -44,22 +49,22 @@ final class AiRep24Woo_API_Client
             return new WP_Error('airep24_not_connected', __('AiRep24 is not connected.', 'airep24woo'));
         }
 
-        return $this->request('GET', '/api/woocommerce/config');
+        return $this->request('GET', '/woocommerce/config');
     }
 
     public function save_remote_config(array $config)
     {
-        return $this->request('POST', '/api/woocommerce/config', $config);
+        return $this->request('POST', '/woocommerce/config', $config);
     }
 
     public function sync_store(array $payload)
     {
-        return $this->request('POST', '/api/woocommerce/sync', $payload, 45);
+        return $this->request('POST', '/woocommerce/sync', $payload, 60);
     }
 
     public function send_event($type, array $payload)
     {
-        return $this->request('POST', '/api/woocommerce/events', [
+        return $this->request('POST', '/woocommerce/events', [
             'type' => sanitize_key($type),
             'payload' => $payload,
         ], 15);

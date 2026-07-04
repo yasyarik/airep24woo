@@ -46,6 +46,17 @@
   padding: 26px;
 }
 
+.airep24woo-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.airep24woo-hero-actions form {
+  margin: 0;
+}
+
 .airep24woo-primary {
   border-color: #176b5b;
   background: #176b5b;

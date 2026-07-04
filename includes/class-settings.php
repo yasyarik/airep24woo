@@ -9,7 +9,7 @@ final class AiRep24Woo_Settings
     public static function defaults()
     {
         return [
-            'api_base_url' => 'https://web.airep24.com',
+            'api_base_url' => 'https://web.airep24.com/v1',
             'widget_base_url' => 'https://web.airep24.com',
             'connection_token' => '',
             'tenant_id' => '',
